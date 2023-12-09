@@ -14,7 +14,7 @@ This Python script is a web scraper that extracts links from a specified website
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/your-username/web-scraper.git
+   git clone https://github.com/<your-username>/Web-URL-Scraper.git
    cd web-scraper
 
 2. Run the code:
