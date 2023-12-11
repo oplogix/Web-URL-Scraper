@@ -1,69 +1,65 @@
-import argparse
-import csv
-import urllib.request
+import os
+import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse
+import tldextract
+from urllib.parse import urljoin, urlparse, quote
 
-class Scraper:
-    def __init__(self, site):
-        self.site = self.format_url(site)
+def get_domain(url):
+    ext = tldextract.extract(url)
+    return ext.domain
 
-    def format_url(self, url):
-        if not url.startswith(('http://', 'https://')):
-            url = 'https://' + url
-        return url
+def parse_links(soup, url):
+    domain = get_domain(url)
+    with open(f'{domain}_Links.txt', 'w') as file:
+        links = [a['href'] for a in soup.find_all('a', href=True)]
+        for link in links:
+            file.write(link + '\n')
+    print(f'Links saved to {domain}_Links.txt')
 
-    def scrape(self):
+def download_images(soup, url):
+    domain = get_domain(url)
+    image_folder = f'./{domain}_images/'
+    os.makedirs(image_folder, exist_ok=True)
+
+    images = [img['src'] for img in soup.find_all('img', src=True)]
+    for img_url in images:
         try:
-            r = urllib.request.urlopen(self.site)
-            html = r.read()
-            parser = "html.parser"
-            sp = BeautifulSoup(html, parser)
+            if not img_url.startswith(('http://', 'https://')):
+                img_url = urljoin(url, img_url)
 
-            url_dict = {"LINKS": []}
+            img_data = requests.get(img_url).content
 
-            for tag in sp.find_all("a", href=True):
-                url = tag["href"]
-                url_dict["LINKS"].append(url)
-
-            base_name = urlparse(self.site).hostname.replace('www.', '').split('.')[0]
-
+            # Generate a valid filename with a .jpg extension by default
+            img_name = os.path.join(image_folder, f'image_{hash(img_url)}.jpg')
             
-            text_output_file = f"{base_name}-scrape.txt"
-            csv_output_file = f"{base_name}-scrape.csv"
-
-            with open(text_output_file, "w", encoding="utf-8") as text_file:
-                for section, urls in url_dict.items():
-                    text_file.write(f"--- {section} ---\n")
-                    for url in urls:
-                        text_file.write(url + "\n")
-
-            print(f"URLs saved to {text_output_file} successfully.")
-
-            with open(csv_output_file, "w", newline="", encoding="utf-8") as csv_file:
-                csv_writer = csv.writer(csv_file)
-                csv_writer.writerow(["Section", "URL"])
-                for section, urls in url_dict.items():
-                    for url in urls:
-                        csv_writer.writerow([section, url])
-
-            print(f"URLs saved to {csv_output_file} successfully.")
+            with open(img_name, 'wb') as img_file:
+                img_file.write(img_data)
+            print(f'Downloaded: {img_name}')
         except Exception as e:
-            print(f"An error occurred: {e}")
+            print(f'Error downloading image: {e}')
 
 def main():
-    parser = argparse.ArgumentParser(description="Web Scraper Tool")
-    parser.add_argument("site", nargs="?", help="Website URL to scrape")
-    args = parser.parse_args()
+    url = input("Enter the URL of the site: ")
 
-    if not args.site:
-        parser.print_help()
-        print("\nExample:")
-        print("python web_scraper.py www.example.com")
-        return
+    if not urlparse(url).scheme:
+        protocol = input("Choose a protocol (http or https): ")
+        url = f'{protocol}://{url}'
 
-    scraper = Scraper(args.site)
-    scraper.scrape()
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        option = input("What do you want to parse for?\n1. Links\n2. Images\n")
+
+        if option == '1':
+            parse_links(soup, url)
+        elif option == '2':
+            download_images(soup, url)
+        else:
+            print("Invalid option. Please choose 1 or 2.")
+    else:
+        print(f"Failed to retrieve the content. Status code: {response.status_code}")
 
 if __name__ == "__main__":
     main()
